@@ -79,6 +79,71 @@ Found in 5 files. This was needed for Python 2 compatibility. Since Python 2 is 
 
 `boto` (AWS SDK v1) has been deprecated since 2015. The HCP downloader should use `boto3`.
 
+### 1.11 Division-by-Zero in Gaussian Model Spherical Mean (gaussian_models.py:184, 340)
+
+```python
+E_mean_ = exp_bl * np.sqrt(np.pi) * erf(sqrt_bl) / (2 * sqrt_bl)
+```
+
+`sqrt_bl` is zero when `bvals` is zero or near-zero, producing NaN/Inf that silently propagates through fitting.
+
+### 1.12 Division-by-Zero in Temporal Zeppelin Restricted Term (gaussian_models.py:295, 333)
+
+```python
+A * (np.log(Delta / delta) + 3 / 2.) / (Delta - delta / 3.)
+```
+
+When `Delta == delta / 3`, the denominator is zero. This is the same `tau` issue as 1.3 but in a different code path.
+
+### 1.13 Division-by-Zero in Gradient Conversions (gradient_conversions.py:20, 65)
+
+```python
+q = np.sqrt(b / tau) / (2 * np.pi)
+```
+
+Where `tau = Delta - delta / 3`. If `Delta == delta / 3`, tau is zero. This is a foundational utility used throughout the codebase.
+
+### 1.14 Negative Sqrt in Anisotropy Index (fitted_modeling_framework.py:793-794)
+
+```python
+AI[self.mask] = np.sqrt(1 - sh_0[self.mask] / sh_sum_squared[self.mask])
+```
+
+If `sh_0 > sh_sum_squared` at any voxel (possible with noisy data), the value inside `sqrt` goes negative, producing NaN.
+
+### 1.15 Arccos Without Bounds Clamping (utils.py:333, 362)
+
+```python
+theta = np.arccos(z / r)
+mu[..., 0] = np.arccos(xyz[..., 2] / r)
+```
+
+Floating-point arithmetic can push `z/r` slightly outside `[-1, 1]`, making `arccos` return NaN. Should clamp: `np.arccos(np.clip(z/r, -1, 1))`.
+
+### 1.16 Log of Zero in Distribution Normalization (distributions.py:309)
+
+```python
+log_norm_grid = np.log(norm_grid)
+```
+
+If `norm_grid` contains zero or negative values, this produces `-Inf` or NaN that corrupts downstream spline interpolation.
+
+### 1.17 Zero Volume Fraction Sum in MIX Optimizer (mix.py:162)
+
+```python
+vf_x0 /= np.sum(np.clip(vf_x0, 0, np.inf))
+```
+
+If all volume fraction estimates are negative (clipped to 0), the sum is zero, causing division-by-zero.
+
+### 1.18 Tortuosity Helper Division-by-Zero (utils.py:231)
+
+```python
+vf_intra = vf_intra / (vf_intra + vf_extra)
+```
+
+If both `vf_intra` and `vf_extra` are zero, this divides by zero with no guard.
+
 ---
 
 ## 2. Outdated Infrastructure
